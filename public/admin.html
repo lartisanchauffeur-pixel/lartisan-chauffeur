@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>Admin | L’Artisan Chauffeur</title>
+<style>
+:root{--bg:#faf8f4;--ink:#23262b;--gold:#b8913a;--line:#e8e2d6;--dark:#1f2328}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;line-height:1.5}
+header{background:var(--dark);color:#fff;padding:16px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+header b{font-family:Georgia,serif;font-size:1.2rem;color:var(--gold)}
+main{max-width:860px;margin:0 auto;padding:16px}
+button,input{font:inherit}
+.btn{border:1px solid var(--gold);background:#fff;color:#8a6a1f;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600}
+.btn.gold{background:var(--gold);color:#fff}.btn.red{border-color:#c0392b;color:#c0392b}
+.tabs{display:flex;gap:8px;margin:6px 0 16px;flex-wrap:wrap}
+.tab{flex:1;min-width:110px;padding:10px;border:1px solid var(--line);background:#fff;border-radius:10px;cursor:pointer;font-weight:600}
+.tab.on{background:var(--dark);color:#fff}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px}
+.card h3{margin:0 0 4px;font-size:1.05rem}.when{color:#8a6a1f;font-weight:600}
+.card p{margin:4px 0;font-size:.92rem}.muted{color:#777}
+.flag{display:inline-block;background:#fdecea;color:#c0392b;border-radius:99px;padding:2px 10px;font-size:.75rem;font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.row a{color:#8a6a1f}
+#login{max-width:340px;margin:60px auto;text-align:center}
+#login input{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;margin:12px 0}
+.err{color:#c0392b;min-height:1.4em}
+</style></head><body>
+<header><b>L’Artisan Chauffeur · Admin</b><button class="btn" id="out" hidden>Déconnexion</button></header>
+<main>
+<form id="login"><h2>Espace administrateur</h2><input type="password" id="pw" placeholder="Mot de passe" autocomplete="current-password" required><button class="btn gold" style="width:100%">Se connecter</button><div class="err" id="err"></div></form>
+<section id="app" hidden>
+  <div class="tabs" id="tabs"></div><div id="list"></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const TABS=[['upcoming','À venir'],['done','Terminées'],['cancelled','Annulées']];
+let pw=sessionStorage.getItem('pw')||'',data=[],tab='upcoming';
+const api=async(method,body)=>{
+  const r=await fetch('/api/admin',{method,headers:{Authorization:'Bearer '+pw,'Content-Type':'application/json'},body:body&&JSON.stringify(body)});
+  if(r.status===401) throw new Error('auth'); if(!r.ok) throw new Error('server'); return r.json();
+};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function load(){
+  try{ data=(await api('GET')).bookings; $('login').hidden=true;$('app').hidden=false;$('out').hidden=false;render(); }
+  catch(e){ $('app').hidden=true;$('login').hidden=false;$('out').hidden=true;
+    if(pw) $('err').textContent=e.message==='auth'?'Mot de passe incorrect.':'Erreur du serveur, réessayez.'; sessionStorage.removeItem('pw'); }
+}
+function render(){
+  const by=s=>data.filter(b=>(b.status||'upcoming')===s);
+  $('tabs').innerHTML=TABS.map(([k,l])=>`<button class="tab ${k===tab?'on':''}" data-t="${k}">${l} (${by(k).length})</button>`).join('');
+  let items=by(tab); if(tab!=='upcoming') items=items.reverse();
+  $('list').innerHTML=items.length?items.map(card).join(''):'<p class="muted">Aucune course.</p>';
+}
+function card(b){
+  const d=new Date(b.start), late=tab==='upcoming'&&d<new Date();
+  const when=d.toLocaleString('fr-FR',{dateStyle:'full',timeStyle:'short',timeZone:'Europe/Paris'});
+  const map=`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(b.from)}&destination=${encodeURIComponent(b.to)}`;
+  const tel=(b.phone||'').replace(/[^\d+]/g,'');
+  const btn=(s,l,c)=>`<button class="btn ${c||''}" data-id="${b.id}" data-s="${s}">${l}</button>`;
+  return `<div class="card"><h3>${esc(b.name)} · ${esc(b.service)} ${late?'<span class="flag">à clôturer</span>':''}</h3>
+  <p class="when">${esc(when)}</p>
+  <p>📍 ${esc(b.from)} → ${esc(b.to)}</p>
+  <p>👥 ${esc(b.pax)} passager(s) · 🧳 ${esc(b.bags||0)} bagage(s)${b.hours?` · ⏱ ${esc(b.hours)} h`:''}${b.price?` · 💶 ${esc(b.price)}`:''}</p>
+  ${b.trip?`<p>✈ ${esc(b.trip)}</p>`:''}${b.comments?`<p class="muted">💬 ${esc(b.comments)}</p>`:''}
+  <div class="row"><a href="tel:${esc(tel)}">📞 ${esc(b.phone)}</a><a href="https://wa.me/${esc(tel.replace('+',''))}" target="_blank" rel="noopener">WhatsApp</a><a href="mailto:${esc(b.email)}">✉ Email</a><a href="${map}" target="_blank" rel="noopener">🗺 Itinéraire</a></div>
+  <div class="row">${tab==='upcoming'?btn('done','✅ Marquer terminée','gold')+btn('cancelled','Annuler la course','red'):btn('upcoming','Remettre à venir')}</div></div>`;
+}
+$('tabs').onclick=e=>{const t=e.target.dataset.t;if(t){tab=t;render()}};
+$('list').onclick=async e=>{
+  const id=e.target.dataset.id,s=e.target.dataset.s; if(!id) return;
+  if(s==='cancelled'&&!confirm('Annuler cette course ?')) return;
+  e.target.disabled=true;
+  try{await api('POST',{id,status:s});await load()}catch{alert('Erreur, réessayez.');e.target.disabled=false}
+};
+$('login').onsubmit=e=>{e.preventDefault();pw=$('pw').value;sessionStorage.setItem('pw',pw);$('err').textContent='';load()};
+$('out').onclick=()=>{sessionStorage.removeItem('pw');pw='';location.reload()};
+if(pw) load();
+</script></body></html>
