@@ -3,7 +3,9 @@ let tok, exp = 0;
 
 async function token() {
   if (tok && Date.now() < exp) return tok;
-  const sa = JSON.parse(Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_B64, 'base64').toString());
+  // Clé du compte de service : JSON collé tel quel, ou encodé en base64
+  const sa = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+    || Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_B64 || '', 'base64').toString());
   const b = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
   const head = b({ alg: 'RS256', typ: 'JWT' }) + '.' + b({
